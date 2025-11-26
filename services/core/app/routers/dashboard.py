@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.database import db
+from shared.database import db
 
 router = APIRouter()
 

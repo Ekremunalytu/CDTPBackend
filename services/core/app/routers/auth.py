@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from app.database import db
-from app.models import UserLogin
+from shared.database import db
+from shared.models import UserLogin
 
 router = APIRouter()
 

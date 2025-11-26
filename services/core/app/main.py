@@ -1,15 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import socketio
-from app.database import db
-from app.socket_manager import sio
+from shared.database import db
+from app.socket_manager import sio, start_background_tasks
 from app.routers import auth, measurements, dashboard
 
 # FastAPI App
-app = FastAPI()
+fastapi_app = FastAPI()
 
 # CORS
-app.add_middleware(
+fastapi_app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
@@ -17,22 +17,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Socket.IO
-socket_app = socketio.ASGIApp(sio, app)
+# Socket.IO - Wrap FastAPI app
+socket_app = socketio.ASGIApp(sio, fastapi_app)
 
 # Database Events
-@app.on_event("startup")
+@fastapi_app.on_event("startup")
 async def startup():
     await db.connect()
+    await start_background_tasks()
 
-@app.on_event("shutdown")
+@fastapi_app.on_event("shutdown")
 async def shutdown():
     await db.disconnect()
 
 # Include Routers
-app.include_router(auth.router, prefix="/api", tags=["Auth"])
-app.include_router(measurements.router, prefix="/api", tags=["Measurements"])
-app.include_router(dashboard.router, prefix="/api", tags=["Dashboard"])
+fastapi_app.include_router(auth.router, prefix="/api", tags=["Auth"])
+fastapi_app.include_router(measurements.router, prefix="/api", tags=["Measurements"])
+fastapi_app.include_router(dashboard.router, prefix="/api", tags=["Dashboard"])
 
 # Socket.IO Events
 @sio.event

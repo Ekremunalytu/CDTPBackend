@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from app.database import db
-from app.models import MeasurementCreate
+from shared.database import db
+from shared.models import MeasurementCreate
 import socketio
 
 router = APIRouter()

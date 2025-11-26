@@ -4,3 +4,4 @@ asyncpg
 python-socketio
 python-dotenv
 pydantic
+redis

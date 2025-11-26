@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - cdtp-network
+
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: cdtp_health
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - cdtp-network
+
+  core:
+    build:
+      context: .
+      dockerfile: services/core/Dockerfile
+    image: cdtp-core
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_USER=postgres
+      - DB_HOST=db
+      - DB_NAME=cdtp_health
+      - DB_PASSWORD=secret
+      - DB_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - db
+      - redis
+    networks:
+      - cdtp-network
+
+  ingestion:
+    build:
+      context: .
+      dockerfile: services/ingestion/Dockerfile
+    image: cdtp-ingestion
+    ports:
+      - "8001:8000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+    networks:
+      - cdtp-network
+
+  processor:
+    build:
+      context: .
+      dockerfile: services/processor/Dockerfile
+    image: cdtp-processor
+    environment:
+      - DB_USER=postgres
+      - DB_HOST=db
+      - DB_NAME=cdtp_health
+      - DB_PASSWORD=secret
+      - DB_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - db
+      - redis
+    networks:
+      - cdtp-network
+
+volumes:
+  postgres_data:
+
+networks:
+  cdtp-network:
+    driver: bridge

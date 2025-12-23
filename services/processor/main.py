@@ -1,83 +1,93 @@
 import asyncio
-import redis.asyncio as redis
+import asyncpg
 import json
 import os
 from datetime import datetime
 from algorithms import detect_fall, calculate_bpm, check_inactivity
 from database_writer import DatabaseWriter
 
-# Redis Config
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+# Database Config
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "secret")
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.getenv("DB_NAME", "cdtp_health")
+
+DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 async def process_data():
     print("Processor Service Starting...")
     
-    # Initialize Redis
-    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
+    # Initialize DB Pool
+    pool = await asyncpg.create_pool(DATABASE_URL)
+    print("Processor Service: Database connected")
     
-    # Initialize DB
-    db_writer = DatabaseWriter()
-    await db_writer.connect()
+    # Initialize Services
+    # Remove separate database_writer usage in favor of MeasurementService
+    from shared.measurement_service import MeasurementService
+    service = MeasurementService(pool)
     
     print("Processor Service Ready. Waiting for data...")
     
     while True:
         try:
-            # Blocking pop from Redis list 'sensor_data'
-            # Returns tuple ('sensor_data', 'json_string')
-            data = await r.blpop("sensor_data", timeout=0) 
-            
-            if data:
-                raw_json = data[1]
-                sensor_data = json.loads(raw_json)
+            async with pool.acquire() as conn:
+                async with conn.transaction():
+                    # 1. Fetch next unprocessed item safely
+                    row = await conn.fetchrow("""
+                        SELECT * FROM sensor_data_queue 
+                        WHERE processed = FALSE 
+                        ORDER BY created_at 
+                        LIMIT 1 
+                        FOR UPDATE SKIP LOCKED
+                    """)
                 
-                patient_id = sensor_data.get("patient_id")
-                acc = sensor_data.get("accelerometer")
-                ppg = sensor_data.get("ppg_raw")
-                
-                # 1. Run Algorithms
-                is_fall = detect_fall(acc)
-                bpm = calculate_bpm(ppg)
-                # For MVP, we assume inactivity is 0 or calculated elsewhere, 
-                # but let's use a placeholder or the simple check
-                inactivity = 0 
-                
-                # 2. Determine Status
-                status = "NORMAL"
-                alert_msg = None
-                
-                if is_fall:
-                    status = "CRITICAL"
-                    alert_msg = "FALL DETECTED!"
-                elif bpm < 40 or bpm > 120:
-                    status = "WARNING"
-                    alert_msg = f"Abnormal Heart Rate: {bpm} BPM"
-                
-                # 3. Save to DB
-                await db_writer.save_measurement(patient_id, bpm, inactivity, status)
-                
-                # Publish Measurement Update
-                measurement_data = {
-                    "patient_id": patient_id,
-                    "heart_rate": bpm,
-                    "inactivity_seconds": inactivity,
-                    "status": status,
-                    "measured_at": datetime.now().isoformat()
-                }
-                await r.publish("measurement_updates", json.dumps(measurement_data))
-                
-                # 4. Create Alert if needed
-                if alert_msg:
-                    await db_writer.create_alert(patient_id, alert_msg)
-                    
-                    # Publish Alert Update
-                    alert_data = {
-                        "patient_id": patient_id,
-                        "message": alert_msg,
-                        "created_at": datetime.now().isoformat()
-                    }
-                    await r.publish("alert_updates", json.dumps(alert_data))
+                    if row:
+                        patient_id = row['patient_id']
+                        # Handle JSONB or JSON string parsing
+                        acc = json.loads(row['accelerometer']) if isinstance(row['accelerometer'], str) else row['accelerometer']
+                        ppg = row['ppg_raw']
+                        timestamp = row['timestamp']
+                        
+                        
+                        # 2. Get previous state for inactivity calculation (Use SAME connection)
+                        last_movement_at_dt = await service.get_patient_state(patient_id, conn=conn)
+                        last_movement_ts = last_movement_at_dt.timestamp() if last_movement_at_dt else None
+                        
+                        # 3. Run Algorithms
+                        is_fall = detect_fall(acc)
+                        bpm = calculate_bpm(ppg)
+                        
+                        # Calculate Inactivity
+                        inactivity = check_inactivity(acc, timestamp, timestamp, last_movement_ts)
+                        
+                        # Update State if moved
+                        # If inactivity is 0, it means the user moved (based on check_inactivity logic)
+                        if inactivity == 0:
+                            # Update state to NOW (or timestamp of packet)
+                            await service.update_patient_state(patient_id, datetime.fromtimestamp(timestamp), conn=conn)
+                        
+                        # 4. Process Measurement (Evaluate -> Save -> Notify -> Alert)
+                        result = await service.process_measurement(
+                            patient_id, 
+                            bpm, 
+                            inactivity, 
+                            is_fall,
+                            conn=conn
+                        )
+                        
+                        # 5. Mark as processed (Commit happens on exit)
+                        await conn.execute("UPDATE sensor_data_queue SET processed = TRUE WHERE id = $1", row['id'])
+                            
+                        print(f"Processed measurement for {patient_id}: {result['status']}")
+                    else:
+                        # No data, wait outside transaction? 
+                        # Actually asyncpg transaction block exit commits.
+                        pass
+
+            if not row:
+                # Sleep if we didn't find anything
+                await asyncio.sleep(0.5)
                     
         except Exception as e:
             print(f"Error processing data: {e}")
@@ -85,3 +95,4 @@ async def process_data():
 
 if __name__ == "__main__":
     asyncio.run(process_data())
+

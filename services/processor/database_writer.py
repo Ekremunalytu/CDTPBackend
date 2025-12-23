@@ -46,3 +46,18 @@ class DatabaseWriter:
                 print(f"ALERT CREATED for {patient_id}: {message}")
         except Exception as e:
             print(f"Failed to create alert: {e}")
+
+    async def get_patient_settings(self, patient_id: str):
+        if not self.pool:
+            await self.connect()
+
+        query = "SELECT * FROM patient_settings WHERE patient_id = $1"
+        try:
+            async with self.pool.acquire() as connection:
+                row = await connection.fetchrow(query, patient_id)
+                if row:
+                    return dict(row)
+                return None
+        except Exception as e:
+            print(f"Failed to fetch settings: {e}")
+            return None

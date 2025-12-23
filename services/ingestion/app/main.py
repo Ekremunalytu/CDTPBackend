@@ -1,15 +1,31 @@
 from fastapi import FastAPI, HTTPException
+from contextlib import asynccontextmanager
 from app.schemas import RawSensorData
-import redis
+import asyncpg
 import json
 import os
 
-app = FastAPI()
+# Database Config
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "secret")
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.getenv("DB_NAME", "cdtp_health")
 
-# Redis Connection
-redis_host = os.getenv("REDIS_HOST", "localhost")
-redis_port = int(os.getenv("REDIS_PORT", 6379))
-r = redis.Redis(host=redis_host, port=redis_port, db=0, decode_responses=True)
+DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+pool = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global pool
+    pool = await asyncpg.create_pool(DATABASE_URL)
+    print("Ingestion Service: Database connected")
+    yield
+    await pool.close()
+    print("Ingestion Service: Database disconnected")
+
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 async def root():
@@ -18,13 +34,21 @@ async def root():
 @app.post("/api/v1/ingest")
 async def ingest_data(data: RawSensorData):
     try:
-        # Push data to Redis list 'sensor_data'
-        # We store it as a JSON string
-        r.rpush("sensor_data", data.model_dump_json())
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO sensor_data_queue (patient_id, accelerometer, gyroscope, ppg_raw, timestamp)
+                VALUES ($1, $2, $3, $4, $5)
+            """, 
+                data.patient_id, 
+                json.dumps(data.accelerometer), 
+                json.dumps(data.gyroscope), 
+                data.ppg_raw, 
+                data.timestamp
+            )
         return {"success": True, "message": "Data queued"}
-    except redis.RedisError as e:
-        print(f"Redis Error: {e}")
-        raise HTTPException(status_code=503, detail="Service Unavailable (Redis)")
+    except asyncpg.PostgresError as e:
+        print(f"Database Error: {e}")
+        raise HTTPException(status_code=503, detail="Service Unavailable (Database)")
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")

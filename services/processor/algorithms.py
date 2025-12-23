@@ -1,5 +1,5 @@
 import math
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 def calculate_smv(acc: Dict[str, float]) -> float:
     """Calculates Signal Magnitude Vector from accelerometer data."""
@@ -36,25 +36,37 @@ def calculate_bpm(ppg_raw: List[int], sampling_rate: int = 25) -> int:
         return 0
         
     bpm = (peaks / duration_sec) * 60
-    return int(bpm)
+    return max(20, int(bpm))
 
-def check_inactivity(accelerometer: Dict[str, float], last_movement_timestamp: float, current_timestamp: float) -> int:
+def check_inactivity(
+    accelerometer: Dict[str, float], 
+    last_movement_timestamp: float, # from message
+    current_timestamp: float,       # from message
+    last_known_movement_at_db: Optional[float] = None # from state DB
+) -> int:
     """
-    Calculates inactivity duration. 
-    This requires state tracking which might be complex for a stateless worker.
-    For this MVP, we will assume the device sends an 'inactivity_seconds' field 
-    OR we just return 0 if we can't track state across packets easily here.
+    Calculates inactivity duration in seconds.
     
-    However, the management plan says 'Inactivity check'. 
-    Let's assume the device sends 'inactivity_seconds' or we calculate it based on low movement.
-    For now, let's return a dummy value or rely on client-side calculation if possible, 
-    BUT the plan says "Algorithm... Inactivity check".
-    
-    Let's implement a simple check: if SMV is very close to 1g (gravity), it's inactive.
+    Logic:
+    1. Calculate SMV.
+    2. If SMV indicates movement (> 1.1g or < 0.9g), reset inactivity.
+    3. If SMV indicates stillness, calculate time delta since last known movement.
     """
     smv = calculate_smv(accelerometer)
-    # 1g is ~9.8m/s^2 or 1.0 if normalized. Assuming normalized 1.0g for gravity.
-    # If input is in g:
-    if 0.9 < smv < 1.1:
-        return 1 # Represents 1 second of inactivity (approx)
+    
+    # Threshold for "stillness" (approx 1g)
+    # If moving
+    if not (0.9 < smv < 1.1):
+        return 0 # User moved, so inactivity is 0
+        
+    # User is still.
+    # If we have a DB state telling us when they last moved, use it.
+    if last_known_movement_at_db:
+        # inactivity = current time - last movement time
+        # Ensure timestamps are compatible (both unix epoch seconds)
+        delta = current_timestamp - last_known_movement_at_db
+        return int(max(0, delta))
+    
+    # Fallback if no history (first packet)
     return 0
+

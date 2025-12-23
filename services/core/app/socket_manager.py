@@ -1,46 +1,65 @@
 import socketio
-import redis.asyncio as redis
+import asyncpg
 import os
 import json
 import asyncio
 
-# Socket.IO Server
+# Socket.IO Server - Management UI için
 sio = socketio.AsyncServer(
     async_mode='asgi', 
-    cors_allowed_origins=['http://localhost:5173', 'http://127.0.0.1:5173'],
+    cors_allowed_origins='*',  # Herhangi bir management client için
     ping_timeout=60,
     ping_interval=25
 )
 
-# Redis Config
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+# Database Config
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "secret")
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.getenv("DB_NAME", "cdtp_health")
 
-async def redis_subscriber():
-    """
-    Background task to subscribe to Redis channels and emit to Socket.IO
-    """
-    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
-    pubsub = r.pubsub()
-    await pubsub.subscribe("measurement_updates", "alert_updates")
-    
-    print("Socket Manager: Subscribed to Redis channels")
+DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-    async for message in pubsub.listen():
-        if message['type'] == 'message':
-            channel = message['channel']
-            data = json.loads(message['data'])
-            print(f"Core received Redis message on {channel}: {data}")
+async def on_notification(conn, pid, channel, payload):
+    """Callback for PostgreSQL LISTEN notifications"""
+    try:
+        data = json.loads(payload)
+        print(f"Core received PostgreSQL notification on {channel}: {data}")
+        
+        if channel == "measurement_updates":
+            await sio.emit('new_measurement', data)
+        elif channel == "alert_updates":
+            await sio.emit('alert', data)
+    except Exception as e:
+        print(f"Error handling notification: {e}")
+
+async def pg_listener():
+    """
+    Background task to subscribe to PostgreSQL LISTEN channels and emit to Socket.IO
+    """
+    while True:
+        try:
+            conn = await asyncpg.connect(DATABASE_URL)
+            print("Socket Manager: Connected to PostgreSQL")
             
-            if channel == "measurement_updates":
-                await sio.emit('new_measurement', data)
-            elif channel == "alert_updates":
-                await sio.emit('alert', data)
+            await conn.add_listener('measurement_updates', on_notification)
+            await conn.add_listener('alert_updates', on_notification)
+            
+            print("Socket Manager: Subscribed to PostgreSQL channels")
+            
+            # Keep connection alive
+            while True:
+                await asyncio.sleep(60)
+                
+        except Exception as e:
+            print(f"Socket Manager: Connection error - {e}, reconnecting in 5s...")
+            await asyncio.sleep(5)
 
 background_tasks = set()
 
 async def start_background_tasks():
     print("Starting background tasks...")
-    task = asyncio.create_task(redis_subscriber())
+    task = asyncio.create_task(pg_listener())
     background_tasks.add(task)
     task.add_done_callback(background_tasks.discard)

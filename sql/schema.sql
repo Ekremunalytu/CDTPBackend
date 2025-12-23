@@ -112,7 +112,7 @@ CREATE INDEX IF NOT EXISTS idx_ecg_patient_time ON ecg_segments (patient_id, sta
 -- 10. Sensor Data Queue (Redis yerine PostgreSQL Queue)
 CREATE TABLE IF NOT EXISTS sensor_data_queue (
     id              BIGSERIAL PRIMARY KEY,
-    patient_id      VARCHAR(50) NOT NULL,
+    patient_id      UUID NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
     accelerometer   JSONB NOT NULL,
     gyroscope       JSONB NOT NULL,
     ppg_raw         INTEGER[] NOT NULL,

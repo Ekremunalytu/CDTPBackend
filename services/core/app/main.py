@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import socketio
 from shared.database import db
 from app.socket_manager import sio, start_background_tasks
-from app.routers import auth, measurements, dashboard
+from app.routers import auth, measurements, dashboard, sos
 
 # FastAPI App
 fastapi_app = FastAPI()
@@ -34,6 +34,7 @@ async def shutdown():
 fastapi_app.include_router(auth.router, prefix="/api", tags=["Auth"])
 fastapi_app.include_router(measurements.router, prefix="/api", tags=["Measurements"])
 fastapi_app.include_router(dashboard.router, prefix="/api", tags=["Dashboard"])
+fastapi_app.include_router(sos.router, prefix="/api", tags=["SOS"])
 
 # Socket.IO Events
 @sio.event

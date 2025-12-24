@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS caregivers (
 -- 5. Patient-Caregiver İlişkisi
 CREATE TABLE IF NOT EXISTS patient_caregiver (
     patient_id      UUID REFERENCES patients(id) ON DELETE CASCADE,
-    caregiver_id    UUID REFERENCES caregivers(id) ON DELETE CASCADE,
+    caregiver_id    UUID UNIQUE REFERENCES caregivers(id) ON DELETE CASCADE,
     assigned_at     TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (patient_id, caregiver_id)
 );
@@ -108,3 +108,74 @@ CREATE TABLE IF NOT EXISTS ecg_segments (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_ecg_patient_time ON ecg_segments (patient_id, started_at DESC);
+
+-- 10. Sensor Data Queue (Redis yerine PostgreSQL Queue)
+CREATE TABLE IF NOT EXISTS sensor_data_queue (
+    id              BIGSERIAL PRIMARY KEY,
+    patient_id      UUID NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+    accelerometer   JSONB NOT NULL,
+    gyroscope       JSONB NOT NULL,
+    ppg_raw         INTEGER[] NOT NULL,
+    timestamp       DOUBLE PRECISION NOT NULL,
+    processed       BOOLEAN DEFAULT FALSE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_queue_unprocessed ON sensor_data_queue (processed, created_at) WHERE processed = FALSE;
+
+-- 11. Patient States (Real-time Durum Takibi)
+CREATE TABLE IF NOT EXISTS patient_states (
+    patient_id      UUID PRIMARY KEY REFERENCES patients(id) ON DELETE CASCADE,
+    last_movement_at TIMESTAMPTZ,
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 12. Seed Data (Demo için)
+DO $$
+DECLARE
+    v_user_id UUID;
+    v_patient_id UUID := 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
+BEGIN
+    -- Check if patient exists
+    IF NOT EXISTS (SELECT 1 FROM patients WHERE id = v_patient_id) THEN
+        -- Create User
+        INSERT INTO users (username, password_hash, role)
+        VALUES ('demo_patient', 'hash_placeholder', 'PATIENT')
+        RETURNING id INTO v_user_id;
+
+        -- Create Patient
+        INSERT INTO patients (id, user_id, name, birth_date, medical_info)
+        VALUES (v_patient_id, v_user_id, 'Ali Yılmaz', '1960-01-01', 'Hypertension')
+        ON CONFLICT (id) DO NOTHING;
+        
+        -- Create Settings (Trigger handles it, but just in case or for custom values)
+        -- UPDATE patient_settings SET bpm_lower_limit = 45 WHERE patient_id = v_patient_id;
+    END IF;
+
+    -- Check if caregiver exists
+    IF NOT EXISTS (SELECT 1 FROM users WHERE username = 'demo_caregiver') THEN
+        -- Create User (Caregiver)
+        INSERT INTO users (username, password_hash, role)
+        VALUES ('demo_caregiver', 'hash_placeholder', 'CAREGIVER')
+        RETURNING id INTO v_user_id;
+
+        -- Create Caregiver Profile
+        INSERT INTO caregivers (user_id, name, phone_number)
+        VALUES (v_user_id, 'Ayşe Hemşire', '+905551234567');
+
+        -- Link to Demo Patient
+        INSERT INTO patient_caregiver (patient_id, caregiver_id)
+        SELECT v_patient_id, id FROM caregivers WHERE user_id = v_user_id;
+    END IF;
+END $$;
+
+-- 13. Reporting Views
+CREATE OR REPLACE VIEW v_live_heart_rates AS
+SELECT 
+    m.id,
+    p.name AS patient_name,
+    m.heart_rate,
+    m.status,
+    m.measured_at
+FROM measurements m
+JOIN patients p ON m.patient_id = p.id
+ORDER BY m.measured_at DESC;

@@ -18,3 +18,9 @@ class EmergencyLog(BaseModel):
     message: str
     is_resolved: bool
     created_at: datetime
+
+class PatientSettingsUpdate(BaseModel):
+    bpm_lower_limit: Optional[int] = None
+    bpm_upper_limit: Optional[int] = None
+    max_inactivity_seconds: Optional[int] = None
+

@@ -1,0 +1,103 @@
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: cdtp_health
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - cdtp-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d cdtp_health" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  core:
+    build:
+      context: .
+      dockerfile: services/core/Dockerfile
+    image: cdtp-core
+    restart: on-failure
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_USER=postgres
+      - DB_HOST=db
+      - DB_NAME=cdtp_health
+      - DB_PASSWORD=secret
+      - DB_PORT=5432
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cdtp-network
+
+  ingestion:
+    build:
+      context: .
+      dockerfile: services/ingestion/Dockerfile
+    image: cdtp-ingestion
+    restart: on-failure
+    ports:
+      - "8001:8000"
+    environment:
+      - DB_USER=postgres
+      - DB_HOST=db
+      - DB_NAME=cdtp_health
+      - DB_PASSWORD=secret
+      - DB_PORT=5432
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cdtp-network
+
+  processor:
+    build:
+      context: .
+      dockerfile: services/processor/Dockerfile
+    image: cdtp-processor
+    restart: on-failure
+    environment:
+      - DB_USER=postgres
+      - DB_HOST=db
+      - DB_NAME=cdtp_health
+      - DB_PASSWORD=secret
+      - DB_PORT=5432
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cdtp-network
+
+  simulator:
+    build:
+      context: services/simulator
+      dockerfile: Dockerfile
+    image: cdtp-simulator
+    restart: on-failure
+    environment:
+      - INGESTION_URL=http://ingestion:8000/api/v1/ingest
+      - PATIENT_ID=a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11
+      - FREQUENCY_HZ=5.0
+    depends_on:
+      ingestion:
+        condition: service_started
+    networks:
+      - cdtp-network
+
+volumes:
+  postgres_data:
+
+
+networks:
+  cdtp-network:
+    driver: bridge

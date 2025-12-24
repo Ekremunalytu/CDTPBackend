@@ -39,6 +39,12 @@ services:
         condition: service_healthy
     networks:
       - cdtp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   ingestion:
     build:
@@ -59,6 +65,12 @@ services:
         condition: service_healthy
     networks:
       - cdtp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   processor:
     build:
@@ -90,7 +102,7 @@ services:
       - FREQUENCY_HZ=5.0
     depends_on:
       ingestion:
-        condition: service_started
+        condition: service_healthy
     networks:
       - cdtp-network
 

@@ -11,8 +11,8 @@ def generate_normal_data():
     return {
         "patient_id": PATIENT_ID,
         "timestamp": time.time(),
-        "accelerometer": {"x": 0.1, "y": 0.2, "z": 0.98}, # ~1g
-        "gyroscope": {"x": 0.01, "y": 0.01, "z": 0.01},
+        "accelerometer": {"x": [0.1], "y": [0.2], "z": [0.98]}, # ~1g (list format)
+        "gyroscope": {"x": [0.01], "y": [0.01], "z": [0.01]},
         "ppg_raw": [2000 + int(100 * math.sin(i/5)) for i in range(25)] # Normal wave
     }
 
@@ -20,8 +20,8 @@ def generate_fall_data():
     return {
         "patient_id": PATIENT_ID,
         "timestamp": time.time(),
-        "accelerometer": {"x": 2.5, "y": 2.5, "z": 2.5}, # High SMV
-        "gyroscope": {"x": 2.0, "y": 2.0, "z": 2.0},
+        "accelerometer": {"x": [2.5], "y": [2.5], "z": [2.5]}, # High SMV (list format)
+        "gyroscope": {"x": [2.0], "y": [2.0], "z": [2.0]},
         "ppg_raw": [2000 + int(100 * math.sin(i/5)) for i in range(25)]
     }
 
@@ -30,8 +30,8 @@ def generate_tachycardia_data():
     return {
         "patient_id": PATIENT_ID,
         "timestamp": time.time(),
-        "accelerometer": {"x": 0.1, "y": 0.2, "z": 0.98},
-        "gyroscope": {"x": 0.01, "y": 0.01, "z": 0.01},
+        "accelerometer": {"x": [0.1], "y": [0.2], "z": [0.98]},
+        "gyroscope": {"x": [0.01], "y": [0.01], "z": [0.01]},
         "ppg_raw": [2000 + int(100 * math.sin(i/2)) for i in range(25)] 
     }
 
@@ -70,7 +70,7 @@ def run_simulation():
                     # Print summary of sent data
                     hr_avg = sum(data['ppg_raw']) / len(data['ppg_raw']) # Rough proxy for visualization
                     acc = data['accelerometer']
-                    print(f"Sent -> Mode: {mode:<12} | Acc: x={acc['x']:.1f}, y={acc['y']:.1f}, z={acc['z']:.1f} | PPG Avg: {hr_avg:.0f}")
+                    print(f"Sent -> Mode: {mode:<12} | Acc: x={acc['x'][0]:.1f}, y={acc['y'][0]:.1f}, z={acc['z'][0]:.1f} | PPG Avg: {hr_avg:.0f}")
             except Exception as e:
                 print(f"Connection Error: {e}")
                 

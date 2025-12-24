@@ -31,6 +31,11 @@ app = FastAPI(lifespan=lifespan)
 async def root():
     return {"message": "Ingestion Service is Running"}
 
+@app.get("/health")
+async def health():
+    """Health check endpoint for Docker"""
+    return {"status": "healthy"}
+
 @app.post("/api/v1/ingest")
 async def ingest_data(data: RawSensorData):
     try:

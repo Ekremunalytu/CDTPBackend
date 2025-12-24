@@ -30,6 +30,11 @@ async def startup():
 async def shutdown():
     await db.disconnect()
 
+@fastapi_app.get("/health")
+async def health():
+    """Health check endpoint for Docker"""
+    return {"status": "healthy"}
+
 # Include Routers
 fastapi_app.include_router(auth.router, prefix="/api", tags=["Auth"])
 fastapi_app.include_router(measurements.router, prefix="/api", tags=["Measurements"])

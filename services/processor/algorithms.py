@@ -26,23 +26,26 @@ def calculate_smv_array(acc: Dict[str, List[float]]) -> List[float]:
 
 
 def detect_fall(accelerometer: Dict[str, List[float]], 
-                impact_threshold: float = 3.0,
+                impact_threshold: float = 2.5,
                 freefall_threshold: float = 0.5,
-                stillness_threshold: float = 1.15,
+                stillness_threshold: float = 1.08,
                 stillness_samples: int = 5) -> Tuple[bool, str]:
     """
     Gelişmiş düşme algılama algoritması.
     
-    Düşme 3 aşamada tespit edilir:
-    1. Free-fall (serbest düşüş): SMV < 0.5g 
-    2. Impact (çarpma): SMV > 3.0g
-    3. Stillness (hareketsizlik): Çarpmadan sonra SMV ≈ 1g
+    Düşme 2 aşamada tespit edilir (Arduino ile uyumlu):
+    1. Impact (çarpma): SMV > 2.5g
+    2. Stillness (hareketsizlik): Çarpmadan sonra |SMV - 1g| < 0.08g
+    
+    Not: Eşikler Arduino koduyla (dusme_ve_acil_durum_butonu.ino) uyumludur:
+    - FALL_PEAK_G = 2.5g
+    - STILL_DELTA_G = 0.08g
     
     Args:
         accelerometer: {"x": [...], "y": [...], "z": [...]} array formatında
-        impact_threshold: Çarpma eşiği (g cinsinden), default 3.0g
+        impact_threshold: Çarpma eşiği (g cinsinden), default 2.5g (Arduino uyumlu)
         freefall_threshold: Serbest düşüş eşiği, default 0.5g
-        stillness_threshold: Hareketsizlik eşiği (~1g), default 1.15g
+        stillness_threshold: Hareketsizlik eşiği (~1g + 0.08), default 1.08g
         stillness_samples: Hareketsizlik için gereken sample sayısı
         
     Returns:

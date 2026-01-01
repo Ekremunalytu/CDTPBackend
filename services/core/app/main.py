@@ -1,16 +1,22 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import socketio
 import os
+import json
+from typing import Dict, Set
 from shared.database import db
-from app.socket_manager import sio, start_background_tasks
+from app.socket_manager import sio, start_background_tasks, set_vitals_connections
 from app.routers import auth, measurements, sos, settings
 from app.routers import dashboard as dashboard_router
 from app.routers import patients as patients_router
 from app.routers import caregivers as caregivers_router
 from app.routers import sensor as sensor_router
+
+# WebSocket connection managers (defined early for socket_manager access)
+vitals_connections: Dict[str, Set[WebSocket]] = {}  # patient_id -> connected caregivers
+patient_connections: Dict[str, WebSocket] = {}  # patient_id -> patient websocket
 
 # FastAPI App
 fastapi_app = FastAPI()
@@ -27,11 +33,15 @@ fastapi_app.add_middleware(
 # Socket.IO - Wrap FastAPI app
 socket_app = socketio.ASGIApp(sio, fastapi_app)
 
+# vitals_connections is now defined at the top of the file
+
 # Database Events
 @fastapi_app.on_event("startup")
 async def startup():
     await db.connect()
     await start_background_tasks()
+    # Share vitals_connections with socket_manager for WebSocket broadcasting
+    set_vitals_connections(vitals_connections)
 
 @fastapi_app.on_event("shutdown")
 async def shutdown():
@@ -76,14 +86,7 @@ async def disconnect(sid):
     print(f"Client disconnected: {sid}")
 
 # ============ WEBSOCKET ENDPOINTS (Android Native) ============
-from fastapi import WebSocket, WebSocketDisconnect
-from typing import Dict, Set
-import json
 import asyncio
-
-# WebSocket connection managers
-vitals_connections: Dict[str, Set[WebSocket]] = {}  # patient_id -> connected caregivers
-patient_connections: Dict[str, WebSocket] = {}  # patient_id -> patient websocket
 
 
 @fastapi_app.websocket("/ws/vitals/{patient_id}")

@@ -103,7 +103,7 @@ services:
     environment:
       - INGESTION_URL=http://172.28.0.30:8000/api/v1/ingest
       - PATIENT_ID=a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11
-      - FREQUENCY_HZ=5.0
+      - FREQUENCY_HZ=1.0
     depends_on:
       ingestion:
         condition: service_healthy

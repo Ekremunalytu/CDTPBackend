@@ -14,7 +14,8 @@ import sys
 # Configuration from ENV
 API_URL = os.getenv("INGESTION_URL", "http://ingestion:8000/api/v1/ingest")
 PATIENT_ID = os.getenv("PATIENT_ID", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
-FREQUENCY_HZ = float(os.getenv("FREQUENCY_HZ", "5.0"))
+# Reduced from 5Hz to 1Hz for more readable updates
+FREQUENCY_HZ = float(os.getenv("FREQUENCY_HZ", "1.0"))
 
 # Simulation window size (number of samples per packet)
 WINDOW_SIZE = 25  # 25 sample = 1 saniye @ 25Hz

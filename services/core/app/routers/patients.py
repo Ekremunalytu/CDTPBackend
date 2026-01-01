@@ -117,3 +117,98 @@ async def get_patient_emergency_logs(
         result.append(item)
     
     return result
+
+
+# ============ PATIENT SETTINGS ============
+# Mobil app uyumlu endpoint'ler: /api/patients/{id}/settings
+
+from pydantic import BaseModel, Field
+from typing import Optional
+
+
+class PatientSettingsUpdate(BaseModel):
+    """Hasta ayarları güncelleme modeli"""
+    bpm_lower_limit: Optional[int] = Field(None, ge=20, le=100)
+    bpm_upper_limit: Optional[int] = Field(None, ge=60, le=250)
+    max_inactivity_seconds: Optional[int] = Field(None, ge=60, le=7200)
+
+
+@router.get("/patients/{patient_id}/settings")
+async def get_patient_settings(patient_id: str):
+    """
+    Hasta ayarlarını getir.
+    
+    Returns:
+        - patient_id: Hasta UUID
+        - bpm_lower_limit: Minimum BPM eşiği
+        - bpm_upper_limit: Maksimum BPM eşiği
+        - max_inactivity_seconds: Hareketsizlik limiti (saniye)
+    """
+    query = "SELECT * FROM patient_settings WHERE patient_id = $1"
+    row = await db.fetch_one(query, patient_id)
+    
+    if not row:
+        raise HTTPException(status_code=404, detail="Patient settings not found")
+    
+    return {
+        "patient_id": str(row["patient_id"]),
+        "bpm_lower_limit": row["bpm_lower_limit"],
+        "bpm_upper_limit": row["bpm_upper_limit"],
+        "max_inactivity_seconds": row["max_inactivity_seconds"]
+    }
+
+
+@router.put("/patients/{patient_id}/settings")
+async def update_patient_settings(patient_id: str, settings: PatientSettingsUpdate):
+    """
+    Hasta ayarlarını güncelle.
+    
+    Args:
+        patient_id: Hasta UUID
+        settings: Güncellenecek ayarlar
+    
+    Returns:
+        Güncellenmiş ayarlar
+    """
+    updates = []
+    values = []
+    idx = 1
+    
+    if settings.bpm_lower_limit is not None:
+        updates.append(f"bpm_lower_limit = ${idx}")
+        values.append(settings.bpm_lower_limit)
+        idx += 1
+    
+    if settings.bpm_upper_limit is not None:
+        updates.append(f"bpm_upper_limit = ${idx}")
+        values.append(settings.bpm_upper_limit)
+        idx += 1
+    
+    if settings.max_inactivity_seconds is not None:
+        updates.append(f"max_inactivity_seconds = ${idx}")
+        values.append(settings.max_inactivity_seconds)
+        idx += 1
+    
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    
+    values.append(patient_id)
+    query = f"""
+        UPDATE patient_settings 
+        SET {', '.join(updates)}, updated_at = NOW()
+        WHERE patient_id = ${idx}
+        RETURNING patient_id, bpm_lower_limit, bpm_upper_limit, max_inactivity_seconds
+    """
+    
+    row = await db.fetch_one(query, *values)
+    
+    if not row:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    return {
+        "patient_id": str(row["patient_id"]),
+        "bpm_lower_limit": row["bpm_lower_limit"],
+        "bpm_upper_limit": row["bpm_upper_limit"],
+        "max_inactivity_seconds": row["max_inactivity_seconds"]
+    }
+

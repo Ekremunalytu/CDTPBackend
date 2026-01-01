@@ -21,6 +21,7 @@ class SOSRequest(BaseModel):
 
 
 @router.post("/sos")
+@router.post("/emergency")
 async def trigger_sos(request: SOSRequest):
     """
     Acil durum sinyali oluşturur ve bakıcıya bildirim gönderir.
@@ -82,6 +83,7 @@ async def trigger_sos(request: SOSRequest):
 
 
 @router.put("/sos/{alert_id}/resolve")
+@router.put("/emergency/{alert_id}/resolve")
 async def resolve_sos(alert_id: int):
     """
     Acil durumu çözüldü olarak işaretler.

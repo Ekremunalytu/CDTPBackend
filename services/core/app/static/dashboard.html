@@ -27,7 +27,7 @@
         h1 {
             color: white;
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             font-size: 2.5em;
             text-shadow: 0 2px 10px rgba(0,0,0,0.2);
         }
@@ -45,6 +45,65 @@
         
         .connection-status.disconnected {
             color: #ef4444;
+        }
+        
+        /* Patient Info Card */
+        .patient-info {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .patient-avatar {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5em;
+        }
+        
+        .patient-details {
+            flex: 1;
+        }
+        
+        .patient-name {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .patient-id {
+            color: #666;
+            font-size: 0.9em;
+            font-family: monospace;
+            background: #f3f4f6;
+            padding: 5px 10px;
+            border-radius: 5px;
+            display: inline-block;
+        }
+        
+        .patient-meta {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+        }
+        
+        .meta-item {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .meta-item strong {
+            color: #333;
         }
         
         .cards {
@@ -85,6 +144,12 @@
         .metric-label {
             color: #666;
             font-size: 0.9em;
+        }
+        
+        .metric-range {
+            color: #999;
+            font-size: 0.8em;
+            margin-top: 5px;
         }
         
         .status {
@@ -175,6 +240,23 @@
             margin-top: 20px;
             font-size: 0.9em;
         }
+        
+        /* Settings Badge */
+        .settings-badge {
+            background: #f3f4f6;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            color: #666;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .settings-badge span {
+            border-left: 1px solid #ddd;
+            padding-left: 10px;
+        }
     </style>
 </head>
 <body>
@@ -185,17 +267,35 @@
             🔴 Bağlantı kuruluyor...
         </div>
         
+        <!-- Patient Info Card -->
+        <div class="patient-info">
+            <div class="patient-avatar">👴</div>
+            <div class="patient-details">
+                <div class="patient-name" id="patient-name">Ali Yılmaz</div>
+                <div class="patient-id" id="patient-id">ID: a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11</div>
+                <div class="patient-meta">
+                    <div class="settings-badge">
+                        ⚙️ Ayarlar: 
+                        <span>BPM: <strong id="bpm-range">45-120</strong></span>
+                        <span>Hareketsizlik: <strong id="inactivity-limit">300s</strong></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <div class="cards">
             <div class="card">
                 <h2>💓 Kalp Atışı</h2>
                 <div class="metric" id="bpm">--</div>
                 <div class="metric-label">BPM (Dakikadaki Vuruş)</div>
+                <div class="metric-range">Normal aralık: 60-100 BPM</div>
             </div>
             
             <div class="card">
                 <h2>⏱️ Hareketsizlik</h2>
                 <div class="metric" id="inactivity">--</div>
                 <div class="metric-label">saniye</div>
+                <div class="metric-range">Limit: <span id="inactivity-threshold">300</span> saniye</div>
             </div>
             
             <div class="card">
@@ -217,6 +317,9 @@
     </div>
 
     <script>
+        // Hasta bilgileri (backend'den alınabilir)
+        const PATIENT_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
+        
         // Socket.IO bağlantısı
         const socket = io('http://localhost:8000');
         
@@ -226,6 +329,28 @@
         const statusBadgeEl = document.getElementById('status');
         const alertsListEl = document.getElementById('alerts-list');
         const lastUpdateEl = document.getElementById('last-update');
+        const patientNameEl = document.getElementById('patient-name');
+        const bpmRangeEl = document.getElementById('bpm-range');
+        const inactivityLimitEl = document.getElementById('inactivity-limit');
+        const inactivityThresholdEl = document.getElementById('inactivity-threshold');
+        
+        // Hasta ayarlarını çek
+        async function fetchPatientSettings() {
+            try {
+                const response = await fetch(`http://localhost:8000/api/settings/${PATIENT_ID}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    bpmRangeEl.textContent = `${data.bpm_lower_limit}-${data.bpm_upper_limit}`;
+                    inactivityLimitEl.textContent = `${data.max_inactivity_seconds}s`;
+                    inactivityThresholdEl.textContent = data.max_inactivity_seconds;
+                }
+            } catch (error) {
+                console.error('Ayarlar alınamadı:', error);
+            }
+        }
+        
+        // Sayfa yüklendiğinde ayarları çek
+        fetchPatientSettings();
         
         // Bağlantı durumu
         socket.on('connect', () => {
@@ -244,6 +369,9 @@
         socket.on('new_measurement', (data) => {
             console.log('📊 Yeni ölçüm:', data);
             
+            // Sadece izlediğimiz hastanın verisini göster
+            if (data.patient_id !== PATIENT_ID) return;
+            
             // Metrikleri güncelle
             bpmEl.textContent = data.heart_rate;
             inactivityEl.textContent = data.inactivity_seconds;
@@ -261,6 +389,9 @@
         socket.on('alert', (data) => {
             console.log('🚨 Alert:', data);
             
+            // Sadece izlediğimiz hastanın alertlerini göster
+            if (data.patient_id !== PATIENT_ID) return;
+            
             // "Henüz uyarı yok" mesajını kaldır
             const noAlerts = alertsListEl.querySelector('.no-alerts');
             if (noAlerts) {
@@ -273,7 +404,7 @@
             
             const timestamp = new Date(data.created_at);
             alertItem.innerHTML = `
-                <strong>${data.message}</strong>
+                <strong>⚠️ ${data.message}</strong>
                 <div class="timestamp">${timestamp.toLocaleString('tr-TR')}</div>
             `;
             
@@ -289,6 +420,8 @@
         // SOS alert
         socket.on('sos_alert', (data) => {
             console.log('🆘 SOS Alert:', data);
+            
+            if (data.patient_id !== PATIENT_ID) return;
             
             const noAlerts = alertsListEl.querySelector('.no-alerts');
             if (noAlerts) {

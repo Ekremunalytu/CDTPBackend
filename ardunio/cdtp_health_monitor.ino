@@ -22,7 +22,7 @@
 #include "MAX30100_PulseOximeter.h"
 
 // ==================== PIN TANIMLARI ====================
-#define SDA_PIN 6
+#define SDA_PIN 6 
 #define SCL_PIN 7
 #define BUTTON_PIN 2
 #define LED_PIN 8  // ESP32-C3 dahili LED (varsa, yoksa -1 yap)

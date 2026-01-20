@@ -3,19 +3,19 @@ services:
     image: postgres:15-alpine
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: secret
-      POSTGRES_DB: cdtp_health
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     ports:
-      - "5432:5432"
+      - "${DB_EXTERNAL_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./sql/schema.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       cdtp-network:
-        ipv4_address: 172.28.0.10
+        ipv4_address: ${DB_HOST}
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres -d cdtp_health" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -28,21 +28,21 @@ services:
     image: cdtp-core
     restart: on-failure
     ports:
-      - "8000:8000"
+      - "${CORE_EXTERNAL_PORT}:${CORE_PORT}"
     environment:
-      - DB_USER=postgres
-      - DB_HOST=172.28.0.10
-      - DB_NAME=cdtp_health
-      - DB_PASSWORD=secret
-      - DB_PORT=5432
+      - DB_USER=${DB_USER}
+      - DB_HOST=${DB_HOST}
+      - DB_NAME=${DB_NAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_PORT=${DB_PORT}
     depends_on:
       db:
         condition: service_healthy
     networks:
       cdtp-network:
-        ipv4_address: 172.28.0.20
+        ipv4_address: ${CORE_HOST}
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:${CORE_PORT}/health" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -55,21 +55,21 @@ services:
     image: cdtp-ingestion
     restart: on-failure
     ports:
-      - "8001:8000"
+      - "${INGESTION_EXTERNAL_PORT}:${INGESTION_PORT}"
     environment:
-      - DB_USER=postgres
-      - DB_HOST=172.28.0.10
-      - DB_NAME=cdtp_health
-      - DB_PASSWORD=secret
-      - DB_PORT=5432
+      - DB_USER=${DB_USER}
+      - DB_HOST=${DB_HOST}
+      - DB_NAME=${DB_NAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_PORT=${DB_PORT}
     depends_on:
       db:
         condition: service_healthy
     networks:
       cdtp-network:
-        ipv4_address: 172.28.0.30
+        ipv4_address: ${INGESTION_HOST}
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:${INGESTION_PORT}/health" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -82,34 +82,37 @@ services:
     image: cdtp-processor
     restart: on-failure
     environment:
-      - DB_USER=postgres
-      - DB_HOST=172.28.0.10
-      - DB_NAME=cdtp_health
-      - DB_PASSWORD=secret
-      - DB_PORT=5432
+      - DB_USER=${DB_USER}
+      - DB_HOST=${DB_HOST}
+      - DB_NAME=${DB_NAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_PORT=${DB_PORT}
     depends_on:
       db:
         condition: service_healthy
     networks:
       cdtp-network:
-        ipv4_address: 172.28.0.40
-
-  simulator:
-    build:
-      context: services/simulator
-      dockerfile: Dockerfile
-    image: cdtp-simulator
-    restart: on-failure
-    environment:
-      - INGESTION_URL=http://172.28.0.30:8000/api/v1/ingest
-      - PATIENT_ID=a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11
-      - FREQUENCY_HZ=1.0
-    depends_on:
-      ingestion:
-        condition: service_healthy
-    networks:
-      cdtp-network:
-        ipv4_address: 172.28.0.50
+        ipv4_address: ${PROCESSOR_HOST}
+  # ========================================
+  # SIMULATOR DISABLED - Only ESP32 data will be used
+  # Uncomment below to re-enable dummy data generation
+  # ========================================
+  # simulator:
+  #   build:
+  #     context: services/simulator
+  #     dockerfile: Dockerfile
+  #   image: cdtp-simulator
+  #   restart: on-failure
+  #   environment:
+  #     - INGESTION_URL=http://${INGESTION_HOST}:${INGESTION_PORT}/api/v1/ingest
+  #     - PATIENT_ID=${PATIENT_ID}
+  #     - FREQUENCY_HZ=${FREQUENCY_HZ}
+  #   depends_on:
+  #     ingestion:
+  #       condition: service_healthy
+  #   networks:
+  #     cdtp-network:
+  #       ipv4_address: ${SIMULATOR_HOST}
 
 volumes:
   postgres_data:
@@ -120,5 +123,5 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.28.0.0/16
-          gateway: 172.28.0.1
+        - subnet: ${NETWORK_SUBNET}
+          gateway: ${NETWORK_GATEWAY}

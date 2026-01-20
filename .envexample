@@ -1,0 +1,34 @@
+# ==================== VERITABANI =====================
+DB_USER=postgres
+DB_PASSWORD=secret
+DB_NAME=cdtp_health
+
+# ==================== NETWORK SUBNET ==================
+# Docker internal network subnet
+NETWORK_SUBNET=172.28.0.0/16
+NETWORK_GATEWAY=172.28.0.1
+
+# ==================== SERVİS IP ADRESLERİ =============
+# Her servisin Docker network içindeki IP adresi
+DB_HOST=172.28.0.10
+DB_PORT=5432
+
+CORE_HOST=172.28.0.20
+CORE_PORT=8000
+
+INGESTION_HOST=172.28.0.30
+INGESTION_PORT=8000
+
+PROCESSOR_HOST=172.28.0.40
+
+SIMULATOR_HOST=172.28.0.50
+
+# ==================== DIS PORT MAPPING ================
+# Host makineden erişim için port mapping
+DB_EXTERNAL_PORT=5432
+CORE_EXTERNAL_PORT=8000
+INGESTION_EXTERNAL_PORT=8001
+
+# ==================== SİMÜLATÖR ======================
+PATIENT_ID=a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11
+FREQUENCY_HZ=1.0
